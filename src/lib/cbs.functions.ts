@@ -186,6 +186,7 @@ export interface CbsTransferResult {
   ok: boolean;
   error?: string;
   availableBalance?: number | null;
+  childBalance?: number | null;
 }
 
 /** POST /api/v1/dependents/:childId/transfer, then re-read the parent's balance from CBS. */
@@ -217,8 +218,12 @@ export const transferToDependent = createServerFn({ method: "POST" })
       const msg = json?.["message"];
       return { ok: false, error: typeof msg === "string" && msg ? msg : "Transfer failed." };
     }
-    let availableBalance: number | null = null;
-    try {
+    const tx = json["transaction"] as Record<string, Record<string, unknown>> | undefined;
+    const cb = Number(tx?.["to"]?.["newBalance"]);
+    const childBalance = Number.isFinite(cb) ? cb : null;
+    const fb = Number(tx?.["from"]?.["newBalance"]);
+    let availableBalance: number | null = Number.isFinite(fb) ? fb : null;
+    if (availableBalance == null) try {
       const br = await fetch(`${cbsBase()}/api/v1/users/me/balance`, {
         headers: { Authorization: `Bearer ${data.token}` },
       });
@@ -228,5 +233,5 @@ export const transferToDependent = createServerFn({ method: "POST" })
     } catch {
       /* keep null */
     }
-    return { ok: true, availableBalance };
+    return { ok: true, availableBalance, childBalance };
   });

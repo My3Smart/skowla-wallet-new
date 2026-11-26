@@ -85,7 +85,7 @@ export function TransferDialog({
                 toast.error(r.error ?? "Transfer failed");
                 return;
               }
-              actions.cbsTransferDone(to, amt, r.availableBalance ?? null);
+              actions.cbsTransferDone(to, amt, r.availableBalance ?? null, r.childBalance ?? null);
               toast.success(`${rm(amt)} dihantar kepada ${child?.name ?? "anak"}`);
               onOpenChange(false);
               return;

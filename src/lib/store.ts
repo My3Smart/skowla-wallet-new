@@ -113,6 +113,42 @@ export function transportSummary(mode: "bus" | "parent") {
 
 const STORAGE_KEY = "skowla-state-v2";
 
+/** Read a dependent's real wallet balance from whichever field CBS returns. */
+export function cbsMoney(d: Record<string, unknown>): number {
+  const w = d["wallet"] as Record<string, unknown> | undefined;
+  const raw = d["availableBalance"] ?? d["balance"] ?? d["walletBalance"] ?? w?.["availableBalance"] ?? w?.["balance"];
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+
+/** True when CBS returned any balance field for this dependent. */
+export function cbsHasMoney(d: Record<string, unknown>): boolean {
+  const w = d["wallet"] as Record<string, unknown> | undefined;
+  const raw = d["availableBalance"] ?? d["balance"] ?? d["walletBalance"] ?? w?.["availableBalance"] ?? w?.["balance"];
+  return raw != null && Number.isFinite(Number(raw));
+}
+
+export const CHILD_BAL_KEY = "skowla-cbs-child-balances";
+function knownChildBalance(id: string): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const m = JSON.parse(window.localStorage.getItem(CHILD_BAL_KEY) ?? "{}") as Record<string, number>;
+    return typeof m[id] === "number" ? m[id] : null;
+  } catch {
+    return null;
+  }
+}
+function rememberChildBalance(id: string, bal: number) {
+  if (typeof window === "undefined") return;
+  try {
+    const m = JSON.parse(window.localStorage.getItem(CHILD_BAL_KEY) ?? "{}") as Record<string, number>;
+    m[id] = bal;
+    window.localStorage.setItem(CHILD_BAL_KEY, JSON.stringify(m));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Map CBS dependents to dashboard children (real data, no demo children). */
 export function mapCbsDependents(deps: Record<string, unknown>[]): Child[] {
   return deps
@@ -122,7 +158,7 @@ export function mapCbsDependents(deps: Record<string, unknown>[]): Child[] {
       name: String(d["fullName"] ?? "Child"),
       className: String(d["userCode"] ?? ""),
       school: "Skowla",
-      cardBalance: 0,
+      cardBalance: cbsHasMoney(d) ? cbsMoney(d) : (knownChildBalance(String(d["childId"] ?? d["dependentId"] ?? d["userCode"])) ?? 0),
       dailyLimit: 0,
       spentToday: 0,
       checkIn: "—",
@@ -350,10 +386,14 @@ export const actions = {
     setState((s) => applyTransfer(s, childId, amount));
   },
   /** CBS saved the transfer; mirror it and take the parent's balance from CBS. */
-  cbsTransferDone(childId: string, amount: number, availableBalance: number | null) {
+  cbsTransferDone(childId: string, amount: number, availableBalance: number | null, childBalance: number | null = null) {
+    if (childBalance != null) rememberChildBalance(childId, round2(childBalance));
     setState((s) => {
-      const next = applyTransfer({ ...s, walletBalance: Math.max(s.walletBalance, amount) }, childId, amount);
-      return availableBalance == null ? next : { ...next, walletBalance: round2(availableBalance) };
+      let next = applyTransfer({ ...s, walletBalance: Math.max(s.walletBalance, amount) }, childId, amount);
+      if (availableBalance != null) next = { ...next, walletBalance: round2(availableBalance) };
+      if (childBalance != null)
+        next = { ...next, children: next.children.map((c) => (c.id === childId ? { ...c, cardBalance: round2(childBalance) } : c)) };
+      return next;
     });
   },
   preOrder(childId: string, items: { name: string; price: number; qty: number }[]) {

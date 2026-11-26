@@ -159,3 +159,23 @@ d2("CBS confirmed reload", () => {
     e2(applyConfirmedReload(s, 10, "FPX", null).walletBalance).toBe(110);
   });
 });
+
+import { mapCbsDependents } from "@/lib/store";
+describe("CBS dependent balance", () => {
+  it("shows the real RM 10 balance CBS returns for the child", () => {
+    const [c] = mapCbsDependents([{ childId: "c1", fullName: "Alif", status: "ACTIVE", balance: "10.00" }]);
+    expect(c?.cardBalance).toBe(10);
+  });
+  it("reads a nested wallet balance", () => {
+    const [c] = mapCbsDependents([{ childId: "c1", fullName: "Alif", status: "ACTIVE", wallet: { availableBalance: 13 } }]);
+    expect(c?.cardBalance).toBe(13);
+  });
+});
+
+import { mapCbsDependents as mapDeps } from "@/lib/store";
+describe("CBS dependent balance", () => {
+  it("uses the live CBS balance on login", () => {
+    const [c] = mapDeps([{ childId: "x", fullName: "A", status: "ACTIVE", availableBalance: 15.001 }]);
+    expect(c?.cardBalance).toBe(15);
+  });
+});

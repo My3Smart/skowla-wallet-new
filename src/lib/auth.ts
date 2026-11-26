@@ -106,6 +106,7 @@ export function startSession(user: DemoUser): Session {
 
 /** Start a parent session from a real CBS + Skowla login. */
 export function startCbsSession(r: { accessToken: string; user: Record<string, unknown>; parent: Record<string, unknown> }): Session {
+  localStorage.removeItem("skowla-cbs-child-balances");
   const name = String(r.user["fullName"] ?? r.user["email"] ?? "Parent");
   const s: Session = { role: "parent", email: String(r.user["email"] ?? ""), name, shortName: name.split(" ").slice(0, 2).join(" ") };
   localStorage.setItem("cbsAccessToken", r.accessToken);
@@ -118,7 +119,7 @@ export function startCbsSession(r: { accessToken: string; user: Record<string, u
 }
 
 export function endSession() {
-  for (const k of ["cbsAccessToken", "cbsUser", "cbsWalletNumber", "school-parent"]) window.localStorage.removeItem(k);
+  for (const k of ["cbsAccessToken", "cbsUser", "cbsWalletNumber", "school-parent", "skowla-cbs-child-balances"]) window.localStorage.removeItem(k);
   window.localStorage.removeItem(SESSION_KEY);
   notifySession();
 }
