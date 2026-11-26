@@ -349,6 +349,13 @@ export const actions = {
   transfer(childId: string, amount: number) {
     setState((s) => applyTransfer(s, childId, amount));
   },
+  /** CBS saved the transfer; mirror it and take the parent's balance from CBS. */
+  cbsTransferDone(childId: string, amount: number, availableBalance: number | null) {
+    setState((s) => {
+      const next = applyTransfer({ ...s, walletBalance: Math.max(s.walletBalance, amount) }, childId, amount);
+      return availableBalance == null ? next : { ...next, walletBalance: round2(availableBalance) };
+    });
+  },
   preOrder(childId: string, items: { name: string; price: number; qty: number }[]) {
     setState((s) => applyPreOrder(s, childId, items));
   },

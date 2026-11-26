@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { actions, rm, useAppState } from "@/lib/store";
+import { isCbsSession } from "@/lib/auth";
+import { transferToDependent } from "@/lib/cbs.functions";
 import { cn } from "@/lib/utils";
 
 type Base = { open: boolean; onOpenChange: (v: boolean) => void };
@@ -67,11 +69,30 @@ export function TransferDialog({
         </DialogHeader>
         <form
           className="space-y-3"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
+            const amt = Number(amount);
+            const token = isCbsSession() ? localStorage.getItem("cbsAccessToken") : null;
+            if (token) {
+              if (!(amt > 0) || amt > walletBalance) {
+                toast.error(tr("Baki dompet tidak mencukupi"));
+                return;
+              }
+              const r = await transferToDependent({
+                data: { token, childId: to, amount: amt, note: "Pocket money", idempotencyKey: `TRF-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },
+              });
+              if (!r.ok) {
+                toast.error(r.error ?? "Transfer failed");
+                return;
+              }
+              actions.cbsTransferDone(to, amt, r.availableBalance ?? null);
+              toast.success(`${rm(amt)} dihantar kepada ${child?.name ?? "anak"}`);
+              onOpenChange(false);
+              return;
+            }
             if (
               run(
-                () => actions.transfer(to, Number(amount)),
+                () => actions.transfer(to, amt),
                 `${rm(Number(amount))} dihantar kepada ${child?.name ?? "anak"}`,
               )
             )

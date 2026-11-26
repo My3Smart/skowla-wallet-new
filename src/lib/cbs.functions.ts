@@ -179,3 +179,54 @@ export const confirmWalletReload = createServerFn({ method: "POST" })
       availableBalance: Number.isFinite(bal) ? bal : null,
     };
   });
+
+/* ---------- Transfer to dependent ---------- */
+
+export interface CbsTransferResult {
+  ok: boolean;
+  error?: string;
+  availableBalance?: number | null;
+}
+
+/** POST /api/v1/dependents/:childId/transfer, then re-read the parent's balance from CBS. */
+export const transferToDependent = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        token: z.string().min(1).max(4000),
+        childId: z.string().min(1).max(100),
+        amount: z.number().positive().max(10000),
+        note: z.string().max(200).optional(),
+        idempotencyKey: z.string().min(1).max(100),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }): Promise<CbsTransferResult> => {
+    const { status, json } = await cbsPost(
+      `/api/v1/dependents/${encodeURIComponent(data.childId)}/transfer`,
+      data.token,
+      {
+        amount: Math.round(data.amount * 100) / 100,
+        currency: "MYR",
+        note: data.note ?? "Pocket money",
+        idempotencyKey: data.idempotencyKey,
+      },
+    );
+    if (!json?.["success"]) {
+      if (status === 0) return { ok: false, error: "Unable to connect to CBS. Please try again." };
+      const msg = json?.["message"];
+      return { ok: false, error: typeof msg === "string" && msg ? msg : "Transfer failed." };
+    }
+    let availableBalance: number | null = null;
+    try {
+      const br = await fetch(`${cbsBase()}/api/v1/users/me/balance`, {
+        headers: { Authorization: `Bearer ${data.token}` },
+      });
+      const bj = (await br.json()) as Record<string, unknown>;
+      const n = Number(bj["availableBalance"] ?? bj["balance"]);
+      availableBalance = Number.isFinite(n) ? n : null;
+    } catch {
+      /* keep null */
+    }
+    return { ok: true, availableBalance };
+  });
